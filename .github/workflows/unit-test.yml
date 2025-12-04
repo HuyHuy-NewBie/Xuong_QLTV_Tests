@@ -18,24 +18,26 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # Chỉ restore + build project test → tránh lỗi cancel
+      # Restore + Build chỉ test project
       - name: Restore test project
         run: dotnet restore QLTV.Tests/QLTV.Tests.csproj
 
       - name: Build test project
         run: dotnet build QLTV.Tests/QLTV.Tests.csproj --no-restore --configuration Release
 
-      # Tạo thư mục + chạy test (chắc chắn tạo được file TRX + coverage)
+      # Bước quan trọng nhất: chạy test + tạo đúng file TRX và coverage.cobertura.xml
       - name: Run Unit Tests
         run: |
-          New-Item -ItemType Directory -Force -Path TestResults
+          New-Item -ItemType Directory -Path TestResults -Force
           dotnet test QLTV.Tests/QLTV.Tests.csproj `
             --no-build `
             --configuration Release `
             --collect:"XPlat Code Coverage" `
+            --settings coverlet.runsettings `
             --logger "trx;LogFileName=QLTV.Tests.trx" `
             --results-directory "TestResults"
 
+      # Upload TRX để dorny đọc
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -43,6 +45,7 @@ jobs:
           name: test-results
           path: TestResults/**/*.trx
 
+      # Báo cáo test đẹp
       - name: Publish Test Report
         uses: dorny/test-reporter@v1
         if: always()
@@ -52,34 +55,24 @@ jobs:
           reporter: dotnet-trx
           fail-on-error: false
 
-      # Coverage: chỉ dùng 1 loại report để tránh lỗi Cobertura
+      # Fix lỗi coverage + reportgenerator
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.3.0
 
       - name: Generate Coverage Report
         if: always()
         run: |
-          reportgenerator `
-            -reports:"TestResults/**/coverage.cobertura.xml" `
-            -targetdir:"coveragereport" `
-            -reporttypes:HtmlInline_AzurePipelines
-
-      # Chỉ upload khi thư mục tồn tại
-      - name: Upload Coverage Report
-        if: always()
-        run: |
-          if (Test-Path "coveragereport") {
-            echo "Coverage report generated successfully"
+          $coverageFile = Get-ChildItem -Path "TestResults" -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1
+          if ($coverageFile) {
+            reportgenerator -reports:$($coverageFile.FullName) -targetdir:coveragereport -reporttypes:HtmlInline_AzurePipelines
           } else {
-            echo "No coverage file found, skipping upload"
+            Write-Host "Không tìm thấy file coverage.cobertura.xml"
             exit 0
           }
-        shell: pwsh
 
-      - name: Upload Coverage HTML Artifact
+      - name: Upload Coverage Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coveragereport/
-          if-no-files-found: ignore   # quan trọng: không báo warning nữa
+          path: coveragereport/**
