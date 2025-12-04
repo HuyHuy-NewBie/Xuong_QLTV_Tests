@@ -1,4 +1,4 @@
-name: CI/CD - Unit Tests Only
+name: CI/CD - QLTV Full Pipeline
 on:
   push:
     branches: [ main, master ]
@@ -6,6 +6,7 @@ on:
     branches: [ main, master ]
 
 jobs:
+  # ================== CI: Chạy test + coverage (giữ nguyên như cũ) ==================
   test:
     runs-on: windows-latest
     steps:
@@ -40,7 +41,6 @@ jobs:
           name: test-results
           path: TestResults/**/*.trx
 
-      # ĐÃ THAY ĐỔI DUY NHẤT 1 BƯỚC NÀY
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: always()
@@ -48,8 +48,6 @@ jobs:
           report_paths: 'TestResults/**/*.trx'
           check_name: 'Unit Test Results - QLTV'
           fail_on_failure: false
-          # (tùy chọn) nếu muốn comment vào PR thì thêm:
-          # comment_on_pr: true
 
       - name: Generate Coverage Report
         if: always()
@@ -67,3 +65,45 @@ jobs:
         with:
           name: coverage-report
           path: coveragereport/**
+
+  # ================== CD: Tự động build + xuất file chạy được khi merge vào main ==================
+  deploy:
+    needs: test                                   # Chỉ chạy khi job test PASS
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore & Build toàn bộ solution
+        run: dotnet build QLTV.sln --configuration Release --no-restore
+
+      - name: Publish ứng dụng Windows (tạo file .exe chạy độc lập)
+        run: |
+          dotnet publish QLTV/QLTV.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            /p:PublishSingleFile=true `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            --output ./publish-app
+
+      - name: Nén thành file ZIP để dễ download
+        run: Compress-Archive -Path ./publish-app/* -DestinationPath QLTV_Latest.zip
+
+      - name: Upload ứng dụng QLTV (CD hoàn chỉnh)
+        uses: actions/upload-artifact@v4
+        with:
+          name: QLTV-Windows-App-Latest-v${{ github.run_number }}
+          path: QLTV_Latest.zip
+          retention-days: 90
+
+      - name: Thông báo thành công (hiển thị link download)
+        run: |
+          echo "Ứng dụng đã được build & publish thành công!"
+          echo "Download tại: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
