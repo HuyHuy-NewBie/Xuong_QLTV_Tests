@@ -1,4 +1,4 @@
-﻿using DTO_Xuong;
+﻿using DTO_Xuong; //
 using System.Collections.Generic;
 
 namespace DAL_Xuong.Interface
