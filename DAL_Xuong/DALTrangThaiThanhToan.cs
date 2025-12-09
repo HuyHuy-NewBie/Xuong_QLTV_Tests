@@ -26,7 +26,7 @@ namespace DAL_Xuong
                     MaTrangThai = r["MaTrangThai"].ToString(),
                     TenTrangThai = r["TenTrangThai"].ToString(),
                     NgayTao = Convert.ToDateTime(r["NgayTao"]),
-                    TrangThai = Convert.ToBoolean(r["TrangThai"]) // thêm dòng này
+                    TrangThai = Convert.ToBoolean(r["TrangThai"]) 
                 };
                 ds.Add(tt);
             }
